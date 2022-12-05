@@ -1,5 +1,5 @@
 # ChatGPT-MS
-This repo is named by ChatGPT.
+This repo is named by ChatGPT for Multi-Session ChatGPT API.
 
 The login code is copied from [chatgpt-api](https://github.com/taranjeet/chatgpt-api). And we use the Chatbot api from [ChatGPT](https://github.com/acheong08/ChatGPT).
 
