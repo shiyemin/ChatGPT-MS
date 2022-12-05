@@ -9,7 +9,7 @@ This is not an official OpenAI product. This is a personal project and is not af
 # Setup
 ## Install
 ```
-pip install revChatGPT --upgrade
+git clone --recurse-submodules https://github.com/shiyemin/ChatGPT-MS
 pip install -r requirements.txt
 ```
 
