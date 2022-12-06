@@ -1,4 +1,6 @@
 flask
-playwright
 expiringdict
 requests
+bs4
+svglib
+colorama
