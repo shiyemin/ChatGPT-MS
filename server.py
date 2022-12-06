@@ -100,7 +100,7 @@ def chat():
     return jsonify({"response": answer}), 200
 
 def start_browser():
-    APP.run(port=5001, threaded=True)
+    APP.run(port=5000, threaded=True)
 
 if __name__ == "__main__":
     start_browser()
