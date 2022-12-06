@@ -24,9 +24,9 @@ git clone --recurse-submodules https://github.com/shiyemin/ChatGPT-MS
 pip install -r requirements.txt
 ```
 
-## Login ChatGPT
-`python get_auth.py`
-* Login on the browser
+## Configuration
+`cp config.json.example config.json`
+* Update config.json
 
 ## Start API server
 `python server.py`
