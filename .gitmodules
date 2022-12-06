@@ -1,3 +1,4 @@
 [submodule "PyChatGPT"]
 	path = PyChatGPT
 	url = https://github.com/rawandahmad698/PyChatGPT.git
+	ignore = dirty
