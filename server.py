@@ -62,6 +62,7 @@ if expired_creds:
         print(f"{Fore.GREEN}>> Successfully refreshed credentials.")
 else:
     print(f"{Fore.GREEN}>> Your credentials are valid.")
+    access_token = Auth.get_access_token()
 
 # Cache all conv id
 prev_conv_id_cache = ExpiringDict(max_len=MAX_SESSION_NUM, max_age_seconds=MAX_AGE_SECONDS)
