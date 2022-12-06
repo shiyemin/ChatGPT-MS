@@ -38,22 +38,23 @@ with open("config.json", "r") as f:
         exit(1)
 
 # Try login
-expired_creds = Auth.expired_creds()
 sem = threading.Semaphore()
+access_token = None
 def try_login():
+    global access_token
     sem.acquire()
     if Auth.expired_creds():
         open_ai_auth = Auth.LocalOpenAIAuth(email_address=config["email"], password=config["password"])
         print(f"{Fore.GREEN}>> Credentials have been refreshed.")
         open_ai_auth.begin()
         time.sleep(3)
+        access_token = Auth.get_access_token()
     sem.release()
-    return Auth.get_access_token()
 
 print(f"{Fore.GREEN}>> Checking if credentials are expired...")
-if expired_creds:
+if Auth.expired_creds():
     print(f"{Fore.RED}>> Your credentials are expired." + f" {Fore.GREEN}Attempting to refresh them...")
-    access_token = try_login()
+    try_login()
     is_still_expired = Auth.expired_creds()
     if is_still_expired:
         print(f"{Fore.RED}>> Failed to refresh credentials. Please try again.")
@@ -89,9 +90,9 @@ def chat():
                                       previous_convo_id=prev_conv_id)
     if answer == "400" or answer == "401":
         print(f"{Fore.RED}>> Your token is invalid. Attempting to refresh..")
-        access_token = try_login()
+        try_login()
         return Response(
-                "Your token is invalid. Please try again.",
+                "Please try again.",
                 status=400,
             )
 
