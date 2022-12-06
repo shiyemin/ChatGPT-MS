@@ -83,22 +83,26 @@ def chat():
 
     message = request.json["message"].strip()
     user = request.json["user"].strip()
-    prev_conv_id = get_prev_conv_id(user)
     print(f"{user} message: {message}")
-    answer, previous_convo = Chat.ask(auth_token=access_token,
-                                      prompt=message,
-                                      previous_convo_id=prev_conv_id)
-    if answer == "400" or answer == "401":
-        print(f"{Fore.RED}>> Your token is invalid. Attempting to refresh..")
-        try_login()
-        return Response(
-                "Please try again.",
-                status=400,
-            )
+    if message == "reset":
+        set_prev_conv_id(user, None)
+        answer = "done"
+    else:
+        prev_conv_id = get_prev_conv_id(user)
+        answer, previous_convo = Chat.ask(auth_token=access_token,
+                                          prompt=message,
+                                          previous_convo_id=prev_conv_id)
+        if answer == "400" or answer == "401":
+            print(f"{Fore.RED}>> Your token is invalid. Attempting to refresh..")
+            try_login()
+            return Response(
+                    "Please try again.",
+                    status=400,
+                )
+        if previous_convo is not None:
+            set_prev_conv_id(user, previous_convo)
 
     print(f"Response to {user}: {answer}")
-    if previous_convo is not None:
-        set_prev_conv_id(user, previous_convo)
     return jsonify({"response": answer}), 200
 
 def start_browser():
