@@ -3,13 +3,14 @@
 import os
 import time
 import json
+import base64
 import threading
 from expiringdict import ExpiringDict
 
 from flask import Flask, request, jsonify, Response
 
-from Classes import auth as Auth
-from PyChatGPT.Classes import chat as Chat
+from classes import openai as OpenAI
+from PyChatGPT.src.pychatgpt.classes import chat as Chat
 
 # Fancy stuff
 import colorama
@@ -37,44 +38,52 @@ with open("config.json", "r") as f:
         print(f"{Fore.RED}>> Exiting...")
         exit(1)
 
+# Get access token
+access_token = OpenAI.get_access_token()
+def access_token_expired():
+    if access_token is None or \
+            access_token[0] is None or \
+            access_token[1] is None or \
+            access_token[1] < time.time():
+        return True
+    return False
+
 # Try login
 sem = threading.Semaphore()
-access_token = None
 def try_login():
     global access_token
     sem.acquire()
-    if Auth.expired_creds():
-        open_ai_auth = Auth.LocalOpenAIAuth(email_address=config["email"], password=config["password"])
-        print(f"{Fore.GREEN}>> Credentials have been refreshed.")
-        open_ai_auth.begin()
-        time.sleep(3)
-        access_token = Auth.get_access_token()
+    if access_token_expired():
+        print(f"{Fore.RED}>> Try to refresh credentials.")
+        open_ai_auth = OpenAI.LocalOpenAIAuth(email_address=config["email"], password=config["password"])
+        open_ai_auth.create_token()
+
+        # If after creating the token, it's still expired, then something went wrong.
+        access_token = OpenAI.get_access_token()
+        if access_token_expired():
+            print(f"{Fore.RED}>> Failed to refresh credentials. Please try again.")
+            exit(1)
+        else:
+            print(f"{Fore.GREEN}>> Successfully refreshed credentials.")
+
     sem.release()
 
-print(f"{Fore.GREEN}>> Checking if credentials are expired...")
-if Auth.expired_creds():
-    print(f"{Fore.RED}>> Your credentials are expired." + f" {Fore.GREEN}Attempting to refresh them...")
+if access_token_expired():
     try_login()
-    is_still_expired = Auth.expired_creds()
-    if is_still_expired:
-        print(f"{Fore.RED}>> Failed to refresh credentials. Please try again.")
-        exit(1)
-    else:
-        print(f"{Fore.GREEN}>> Successfully refreshed credentials.")
 else:
     print(f"{Fore.GREEN}>> Your credentials are valid.")
-    access_token = Auth.get_access_token()
 
 # Cache all conv id
+# user => (conversation_id, previous_convo_id)
 prev_conv_id_cache = ExpiringDict(max_len=MAX_SESSION_NUM, max_age_seconds=MAX_AGE_SECONDS)
 def get_prev_conv_id(user):
     if user not in prev_conv_id_cache:
-        prev_conv_id_cache[user] = None
-    prev_conv_id = prev_conv_id_cache[user]
-    return prev_conv_id
+        prev_conv_id_cache[user] = (None, None)
+    conversation_id, prev_conv_id = prev_conv_id_cache[user]
+    return conversation_id, prev_conv_id
 
-def set_prev_conv_id(user, prev_conv_id):
-    prev_conv_id_cache[user] = prev_conv_id
+def set_prev_conv_id(user, conversation_id, prev_conv_id):
+    prev_conv_id_cache[user] = (conversation_id, prev_conv_id)
 
 
 @APP.route("/chat", methods=["POST"])
@@ -83,27 +92,76 @@ def chat():
 
     message = request.json["message"].strip()
     user = request.json["user"].strip()
-    print(f"{user} message: {message}")
+
+    if access_token_expired():
+        try:
+            try_login()
+        except:
+            return Response("ChatGPT login error", status=400)
+
+    print(f"{Fore.RED}[FROM {user}] >> {message}")
     if message == "reset":
-        set_prev_conv_id(user, None)
+        set_prev_conv_id(user, None, None)
         answer = "done"
     else:
-        prev_conv_id = get_prev_conv_id(user)
-        answer, previous_convo = Chat.ask(auth_token=access_token,
+        conversation_id, prev_conv_id = get_prev_conv_id(user)
+        answer, previous_convo, convo_id = Chat.ask(auth_token=access_token,
                                           prompt=message,
-                                          previous_convo_id=prev_conv_id)
+                                          conversation_id=conversation_id,
+                                          previous_convo_id=prev_conv_id,
+                                          proxies=None)
         if answer == "400" or answer == "401":
-            print(f"{Fore.RED}>> Your token is invalid. Attempting to refresh..")
-            try_login()
+            print(f"{Fore.RED}>> Failed to get a response from the API.")
             return Response(
-                    "Please try again.",
+                    "Please try again latter.",
                     status=400,
                 )
-        if previous_convo is not None:
-            set_prev_conv_id(user, previous_convo)
+        set_prev_conv_id(user, convo_id, previous_convo)
 
-    print(f"Response to {user}: {answer}")
+    print(f"{Fore.GREEN}[TO {user}] >> {answer}")
     return jsonify({"response": answer}), 200
+
+
+def update_id_in_stream(user, **kwargs):
+    answer = None
+    try:
+        for answer, previous_convo, convo_id in OpenAI.ask_stream(**kwargs):
+            set_prev_conv_id(user, convo_id, previous_convo)
+            yield json.dumps({"response": answer})
+    except GeneratorExit:
+        pass
+    if answer is None:
+        answer = "Unknown error."
+        yield json.dumps({"response": answer})
+    print(f"{Fore.GREEN}[TO {user}] >> {answer}")
+    yield json.dumps({"response": "[DONE]"})
+
+
+@APP.route("/chat-stream", methods=["POST"])
+def chat_stream():
+    global access_token
+
+    message = request.json["message"].strip()
+    user = request.json["user"].strip()
+
+    if access_token_expired():
+        try:
+            try_login()
+        except:
+            return Response("ChatGPT login error", status=400)
+
+    print(f"{Fore.RED}[FROM {user}] >> {message}")
+    if message == "reset":
+        set_prev_conv_id(user, None, None)
+        return jsonify({"response": "done"}), 200
+    else:
+        conversation_id, prev_conv_id = get_prev_conv_id(user)
+        return Response(update_id_in_stream(user=user,
+                                          auth_token=access_token,
+                                          prompt=message,
+                                          conversation_id=conversation_id,
+                                          previous_convo_id=prev_conv_id,
+                                          proxies=None))
 
 def start_browser():
     APP.run(port=5000, threaded=True)
