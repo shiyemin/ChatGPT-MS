@@ -1,5 +1,5 @@
 # ChatGPT-MS
-This repo is named by ChatGPT for Multi-Session ChatGPT API.
+This repo is named by ChatGPT for Multi-Session ChatGPT API. It is developed to provide APIs for chatbots of WeChat, Dingding, Feishu, Discord, Slack, etc.
 
 The main code is copied from [PyChatGPT](https://github.com/rawandahmad698/PyChatGPT).
 
